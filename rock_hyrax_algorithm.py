@@ -64,7 +64,7 @@ class RockHyrax:
     cooperative foraging. This class models their behavior for load balancing.
     """
     
-    def __init__(self, position: List[float], fitness: float = float('inf')):
+    def __init__(self, position: List[int], fitness: float = float('inf')):
         """
         Initialize a Rock Hyrax agent.
         

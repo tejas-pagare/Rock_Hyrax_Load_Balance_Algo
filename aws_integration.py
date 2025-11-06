@@ -9,6 +9,7 @@ import boto3
 from typing import List, Dict, Optional, Any
 from botocore.exceptions import ClientError, BotoCoreError
 import logging
+from datetime import datetime, timedelta
 
 from rock_hyrax_algorithm import Server, RockHyraxLoadBalancer
 
@@ -91,6 +92,9 @@ class AWSIntegration:
         """
         try:
             # Get CPU utilization
+            end_time = datetime.utcnow()
+            start_time = end_time - timedelta(minutes=5)
+            
             response = self.cloudwatch_client.get_metric_statistics(
                 Namespace='AWS/EC2',
                 MetricName='CPUUtilization',
@@ -100,8 +104,8 @@ class AWSIntegration:
                         'Value': instance_id
                     }
                 ],
-                StartTime='-PT5M',  # Last 5 minutes
-                EndTime='PT0M',
+                StartTime=start_time,
+                EndTime=end_time,
                 Period=300,  # 5 minutes
                 Statistics=['Average']
             )
