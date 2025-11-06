@@ -1,60 +1,165 @@
-# ☁️ Cloud Load Balancing Simulation (RR, RHO, ACO)
+# Cloud Load Balancing Simulation (RR • RHO • ACO)
 
-This project simulates and compares three cloud load balancing algorithms —
-Round Robin (RR), Rock Hyrax Optimization (RHO), and Ant Colony Optimization (ACO) —
-within a heterogeneous cloud environment.
-
-It supports both local and cloud-based execution (e.g., on AWS EC2), and includes integrated AWS logging:
-
-* **DynamoDB** → Stores simulation metrics
-* **S3** → Uploads generated performance and load distribution graphs
+Simulate and compare three load-balancing algorithms—Round Robin (RR), Rock Hyrax Optimization (RHO), and Ant Colony Optimization (ACO)—in a heterogeneous cloud environment. Run locally or on a cloud VM (e.g., AWS EC2), and optionally log results to AWS DynamoDB and upload plots to AWS S3.
 
 ---
 
-## 🧠 Features
+## Table of Contents
 
-* Simulation of three advanced load balancing algorithms (RR, RHO, ACO)
-* Comparison of algorithm performance using visual metrics and graphs
-* Dynamic VM and task generation for heterogeneous cloud environments
-* AWS integration for real-time storage and analysis
-* Command-line options for flexible execution (interactive or automated)
+- Overview
+- Features
+- Project Structure
+- Prerequisites
+- Quick Start
+- Usage
+    - Interactive mode
+    - Non-interactive (defaults)
+- Outputs
+- AWS Integration
+    - AWS prerequisites (IAM, DynamoDB, S3)
+    - Run with AWS flags
+    - What gets created
+- Configuration
+- Troubleshooting
 
 ---
 
-## 📁 Project Structure
+## Overview
+
+This repository provides a reproducible simulation to evaluate algorithmic strategies for distributing tasks across virtual machines (VMs). It produces metrics and publication-ready plots for side-by-side comparison.
+
+## Features
+
+- Three strategies: RR, RHO, ACO
+- Metrics reporting and comparison plots
+- Deterministic defaults with configurable parameters
+- Optional AWS logging to DynamoDB and artifact upload to S3
+
+## Project Structure
+
+```
+.
+├── main.py                     # Main entry point
+├── simulation.py               # Core experiment logic
+├── entities.py                 # VM and Task definitions
+├── config.py                   # Default simulation parameters
+├── interactive.py              # Interactive user prompts
+├── metrics.py                  # Metric calculation & printing
+├── plotting.py                 # .png graph generation
+├── aws_utils.py                # AWS DynamoDB & S3 integration
+├── requirements.txt            # Python dependencies
+├── README.md                   # This file
+└── algorithms/                 # Algorithm implementations
+        ├── __init__.py
+        ├── base.py
+        ├── round_robin.py
+        ├── rho.py
+        └── aco.py
+```
+
+## Prerequisites
+
+- Python 3.9+ (3.10 recommended)
+- Optional (for cloud logging): AWS account and AWS CLI configured (`aws configure`)
+
+## Quick Start
+
+Create a virtual environment and install dependencies.
+
+Windows (PowerShell):
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+macOS/Linux (bash):
 
 ```bash
-.
-├── main.py                # Main entry point
-├── simulation.py          # Core experiment logic
-├── entities.py            # VM and Task definitions
-├── config.py              # Default simulation parameters
-├── interactive.py         # Interactive user prompt handler
-├── metrics.py             # Metric calculation & result printing
-├── plotting.py            # Graph generation (.png)
-├── aws_utils.py           # AWS DynamoDB & S3 integration
-├── requirements.txt       # Python dependencies
-├── README.md              # This file
-└── algorithms/            # Algorithm implementations
-    ├── base.py
-    ├── round_robin.py
-    ├── rho.py
-    └── aco.py
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-⚙️ Local Execution
-1. Setup
-Clone the repository:
- git clone [https://github.com/tejas-pagare/Rock_Hyrax_Load_Balance_Algo.git](https://github.com/tejas-pagare/Rock_Hyrax_Load_Balance_Algo.git)
- cd Rock_Hyrax_Load_Balance_Algo
+## Usage
 
-Create and activate a virtual environment:
- python -m venv venv
- source venv/bin/activate  # On Windows: venv\Scripts\activate
+Run with default parameters (you’ll be prompted to keep defaults or customize):
 
-Install dependencies:
- pip install -r requirements.txt
+```powershell
+python main.py
+```
 
-2. Run the Simulation
-Run with default parameters:
- python main.py
+Skip all prompts and use defaults:
 
+```powershell
+python main.py --skip-interactive
+```
+
+### Outputs
+
+The following plots are generated in the project directory after each run:
+
+- `load_distribution.png`
+- `metrics_comparison.png`
+- `performance_graphs.png`
+
+## AWS Integration
+
+You can log every run to DynamoDB (metrics and metadata) and upload plots to S3 for archival/sharing.
+
+### 1) AWS prerequisites
+
+1. Create an IAM user with permissions (for prototyping only; scope down for production):
+     - `AmazonDynamoDBFullAccess`
+     - `AmazonS3FullAccess`
+     - Configure credentials locally: `aws configure`
+
+2. Create the DynamoDB table (PowerShell one-liner):
+
+```powershell
+aws dynamodb create-table --table-name LoadBalancingSimResults `
+    --attribute-definitions AttributeName=RunID,AttributeType=S AttributeName=AlgorithmTaskCount,AttributeType=S `
+    --key-schema AttributeName=RunID,KeyType=HASH AttributeName=AlgorithmTaskCount,KeyType=RANGE `
+    --billing-mode PAY_PER_REQUEST
+```
+
+3. Create an S3 bucket (e.g., `my-load-balancing-graphs`) in your preferred region.
+
+Default table name used by the app: `LoadBalancingSimResults`.
+
+### 2) Run with AWS flags
+
+```powershell
+python main.py --skip-interactive `
+    --aws-enabled `
+    --s3-bucket my-load-balancing-graphs `
+    --dynamo-table LoadBalancingSimResults
+```
+
+Flags:
+
+- `--aws-enabled`  Enable AWS logging and uploads
+- `--dynamo-table` DynamoDB table name (default: `LoadBalancingSimResults`)
+- `--s3-bucket`    S3 bucket to receive `.png` plots
+- `--aws-profile`  Optional AWS CLI profile to use
+
+### 3) What gets created
+
+- DynamoDB: Previous items are cleared, then metrics from the current run are inserted under a unique `RunID`.
+- S3: All `.png` artifacts are uploaded to a prefix named with that `RunID` (e.g., `s3://my-load-balancing-graphs/sim-run-2025-11-07.../`).
+
+## Configuration
+
+- Edit defaults in `config.py` or use the interactive prompts in `main.py`.
+- Algorithms are implemented under `algorithms/` (extend by adding new classes inheriting from `base.py`).
+
+## Troubleshooting
+
+- AWS credentials: run `aws sts get-caller-identity` to verify your setup.
+- Region mismatches: ensure your S3 bucket and DynamoDB table are in the configured AWS region.
+- Permissions: for production, replace the broad IAM policies with least-privilege, resource-scoped policies.
+
+---
+
+If you find this useful, consider starring the repo and opening issues/PRs for improvements.
