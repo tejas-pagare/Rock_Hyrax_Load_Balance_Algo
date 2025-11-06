@@ -1,89 +1,111 @@
-Cloud Load Balancing Simulation (RR, RHO, ACO)
+☁️ Cloud Load Balancing Simulation (RR, RHO, ACO)
 
-This project simulates and compares three load balancing algorithms (Round Robin, Rock Hyrax Optimization, and Ant Colony Optimization) in a heterogeneous cloud environment.
+This project simulates and compares three cloud load balancing algorithms —
+Round Robin (RR), Rock Hyrax Optimization (RHO), and Ant Colony Optimization (ACO) —
+within a heterogeneous cloud environment.
 
-It is designed to run locally or in a cloud environment (like AWS EC2), with built-in integration to log results to AWS DynamoDB and upload graph artifacts to AWS S3.
+It supports both local and cloud-based execution (e.g., on AWS EC2), and includes integrated AWS logging:
 
-Project Structure
+DynamoDB → Stores simulation metrics
 
+S3 → Uploads generated performance and load distribution graphs
+
+🧠 Features
+
+Simulation of three advanced load balancing algorithms (RR, RHO, ACO)
+
+Comparison of algorithm performance using visual metrics and graphs
+
+Dynamic VM and task generation for heterogeneous cloud environments
+
+AWS integration for real-time storage and analysis
+
+Command-line options for flexible execution (interactive or automated)
+
+📁 Project Structure
 .
 ├── main.py                     # Main entry point
 ├── simulation.py               # Core experiment logic
 ├── entities.py                 # VM and Task definitions
 ├── config.py                   # Default simulation parameters
-├── interactive.py              # Interactive user prompts
-├── metrics.py                  # Metric calculation & printing
-├── plotting.py                 # .png graph generation
+├── interactive.py              # Interactive user prompt handler
+├── metrics.py                  # Metric calculation & result printing
+├── plotting.py                 # Graph generation (.png)
 ├── aws_utils.py                # AWS DynamoDB & S3 integration
-├── README.md                   # This readme file
 ├── requirements.txt            # Python dependencies
-└── algorithms/                 # Directory for algorithm classes
+├── README.md                   # This file
+└── algorithms/                 # Algorithm implementations
     ├── base.py
     ├── round_robin.py
     ├── rho.py
     └── aco.py
 
-
-Local Execution
-
+⚙️ Local Execution
 1. Setup
 
-Clone/Download: Get all the project files into a single directory.
+Clone the repository:
 
-Create a Virtual Environment (Recommended):
+git clone https://github.com/tejas-pagare/Rock_Hyrax_Load_Balance_Algo.git
+cd Rock_Hyrax_Load_Balance_Algo
+
+
+Create and activate a virtual environment:
 
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate       # On Windows: venv\Scripts\activate
 
 
-Install Dependencies:
+Install dependencies:
 
 pip install -r requirements.txt
 
-
-2. Run
+2. Run the Simulation
 
 Run with default parameters:
 
 python main.py
 
 
-This will prompt you to use default or custom parameters.
+You’ll be prompted to use default or custom parameters.
 
-Run and skip prompts (use defaults):
+To skip prompts and run directly with defaults:
 
 python main.py --skip-interactive
 
 
-The script will run the full simulation and generate load_distribution.png, metrics_comparison.png, and performance_graphs.png in the same directory.
+After completion, the script generates:
 
-AWS Execution & Setup
+load_distribution.png
 
-This guide assumes you have an AWS account and the AWS CLI installed and configured.
+metrics_comparison.png
 
-1. AWS Prerequisite Setup
+performance_graphs.png
 
-Create an IAM User:
+These graphs visualize task allocation, performance, and efficiency comparisons.
 
-Go to the IAM service in your AWS console.
+☁️ AWS Execution & Integration
 
-Create a new user.
+💡 Note: Ensure you have an AWS account and the AWS CLI installed and configured (aws configure).
 
-Attach the following policies:
+1. AWS Setup
+Create an IAM User
+
+Open the IAM service in AWS Console.
+
+Create a new user and attach the following policies:
 
 AmazonDynamoDBFullAccess
 
 AmazonS3FullAccess
+(Security note: For production, restrict access to specific resources only.)
 
-(Security Note): For production, you should create custom policies with permissions scoped only to the required table and bucket.
+Generate access keys and configure them via:
 
-Create access keys for this user and configure your environment with them (aws configure).
+aws configure
 
-Create DynamoDB Table:
+Create a DynamoDB Table
 
-You must create the table manually before the first run.
-
-Run this AWS CLI command, replacing YourTableName with the name you want (e.g., LoadBalancingSimResults).
+Before the first run, create a table to store simulation results:
 
 aws dynamodb create-table \
     --table-name LoadBalancingSimResults \
@@ -95,28 +117,17 @@ aws dynamodb create-table \
         AttributeName=AlgorithmTaskCount,KeyType=RANGE \
     --billing-mode PAY_PER_REQUEST
 
+Create an S3 Bucket
 
-The default table name in the script is LoadBalancingSimResults.
+Go to the S3 console.
 
-Create S3 Bucket:
+Create a new private bucket (e.g., my-load-balancing-graphs).
 
-Go to the S3 service in your AWS console.
-
-Create a new, private S3 bucket (e.g., my-load-balancing-graphs). Remember its name.
+Note the bucket name — you’ll need it for the run command.
 
 2. Run with AWS Integration
 
-Now you can run the script with the AWS flags.
-
---aws-enabled: Turns on the AWS logging.
-
---dynamo-table: The name of the table you created (defaults to LoadBalancingSimResults).
-
---s3-bucket: The name of the S3 bucket you created (e.g., my-load-balancing-graphs).
-
---aws-profile (Optional): If you use a specific AWS CLI profile.
-
-Example Command:
+Use the following command:
 
 python main.py --skip-interactive \
                --aws-enabled \
@@ -124,16 +135,60 @@ python main.py --skip-interactive \
                --dynamo-table LoadBalancingSimResults
 
 
-3. What Happens
+Optional:
 
-When you run with AWS enabled, the script will:
+--aws-profile: Specify a custom AWS CLI profile.
 
-Clear DynamoDB: It will scan and delete all items from the LoadBalancingSimResults table (as you requested).
+3. AWS Workflow Overview
 
-Run Simulation: It runs the full experiment locally.
+When AWS integration is enabled, the program:
 
-Log to DynamoDB: It populates the table with all metrics from the new run, tagged with a unique RunID.
+Clears DynamoDB: Deletes previous run entries from the table.
 
-Upload to S3: It uploads the three .png graphs to your S3 bucket under a "folder" named after the RunID (e.g., s3://my-load-balancing-graphs/sim-run-2025-11-07.../).
+Runs Simulation: Executes all three algorithms locally.
 
-You can then view the .png files in the S3 console and query the raw data in the DynamoDB console.# Rock_Hyrax_Load_Balance_Algo
+Logs Metrics: Uploads detailed results to DynamoDB under a unique RunID.
+
+Uploads Graphs: Stores .png result files to your S3 bucket under:
+
+s3://my-load-balancing-graphs/sim-run-2025-11-07.../
+
+
+You can then view:
+
+Metrics and timestamps in DynamoDB Console
+
+Visual performance graphs in S3 Console
+
+📊 Output Overview
+File Name	Description
+load_distribution.png	Task allocation across VMs
+metrics_comparison.png	Comparative metrics (latency, throughput, etc.)
+performance_graphs.png	Consolidated performance visualization
+🧩 Algorithms Overview
+Algorithm	Description	Characteristics
+Round Robin (RR)	Sequential task assignment	Simple, equal distribution, no optimization
+Rock Hyrax Optimization (RHO)	Nature-inspired metaheuristic	Adaptive, considers load and energy balance
+Ant Colony Optimization (ACO)	Probabilistic optimization using pheromone trails	Efficient path selection, dynamic balancing
+🧠 Future Improvements
+
+Integration with container-based simulation (Docker + Kubernetes)
+
+Real-time visualization dashboard (Streamlit)
+
+Extended support for hybrid and edge-cloud environments
+
+Cost-aware and energy-efficient task scheduling extensions
+
+👨‍💻 Author
+
+Pagre Tejas Kiran
+Indian Institute of Information Technology, Sri City
+📧 tejaspagare.work@gmail.com
+
+🌐 GitHub: tejas-pagare
+
+🏷️ License
+
+This project is licensed under the MIT License — see the LICENSE
+ file for details.
