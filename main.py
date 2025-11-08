@@ -7,6 +7,77 @@ import config
 import interactive
 import simulation
 import aws_utils
+import metrics
+import plotting
+
+def run_simulation(sim_params):
+    """Runs the simulation and returns the results."""
+    start_time = time.time()
+    
+    experiment_results, final_metrics, final_times, balancers = simulation.run_experiment(sim_params)
+    
+    end_time = time.time()
+    print(f"\n--- EXPERIMENT COMPLETE ({end_time - start_time:.2f} seconds) ---")
+
+    # --- Process and Log Results ---
+    
+    # 1. Print console comparison
+    metrics.print_comparison(final_metrics)
+    
+    # 2. Generate local graph files
+    plot_files = plotting.generate_all_plots(
+        final_times, 
+        final_metrics, 
+        sim_params['NUM_VMS'], 
+        experiment_results
+    )
+    print("\nGenerated local graph files:")
+    for file in plot_files:
+        print(f"- {file}")
+
+    # 3. Print assignment logs
+    metrics.print_assignment_logs(balancers)
+    
+    return experiment_results, plot_files
+
+
+def handle_aws_operations(args, run_id, sim_params, experiment_results, plot_files):
+    """Handles all AWS-related operations."""
+    if not args.aws_enabled:
+        return
+
+    print("\n--- Logging results to AWS ---")
+    try:
+        # Clear previous results from DynamoDB
+        print(f"Clearing previous results from DynamoDB table: {args.dynamo_table}...")
+        aws_utils.clear_dynamodb_table(args.dynamo_table)
+        print("DynamoDB table cleared.")
+
+        # Log experiment data to DynamoDB
+        print("Logging experiment data to DynamoDB...")
+        aws_utils.log_results_to_dynamodb(
+            args.dynamo_table,
+            run_id,
+            experiment_results,
+            sim_params
+        )
+        print("DynamoDB logging complete.")
+
+        # Upload graph files to S3
+        print("Uploading graph files to S3...")
+        aws_utils.upload_graphs_to_s3(
+            args.s3_bucket,
+            run_id,
+            plot_files
+        )
+        print("S3 upload complete.")
+        print(f"\nFind your results in S3 bucket '{args.s3_bucket}' under prefix (folder) '{run_id}/'")
+
+    except Exception as e:
+        print(f"--- AWS Logging Failed ---")
+        print(f"Error: {e}")
+        print("Please check your AWS credentials, IAM permissions, and resource names.")
+
 
 def main():
     """
@@ -72,71 +143,11 @@ def main():
     run_id = f"sim-run-{datetime.now().strftime('%Y-%m-%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
     print(f"\nStarting simulation with RunID: {run_id}")
 
-    # --- AWS: Clear Previous Results ---
-    if args.aws_enabled:
-        print(f"Clearing previous results from DynamoDB table: {args.dynamo_table}...")
-        try:
-            aws_utils.clear_dynamodb_table(args.dynamo_table)
-            print("DynamoDB table cleared.")
-        except Exception as e:
-            print(f"Error clearing DynamoDB table: {e}")
-            print("Continuing simulation without clearing. Table may not exist or permissions may be missing.")
-            
     # --- Run Simulation ---
-    start_time = time.time()
-    
-    experiment_results, final_metrics, final_times, balancers = simulation.run_experiment(sim_params)
-    
-    end_time = time.time()
-    print(f"\n--- EXPERIMENT COMPLETE ({end_time - start_time:.2f} seconds) ---")
+    experiment_results, plot_files = run_simulation(sim_params)
 
-    # --- Process and Log Results ---
-    
-    # 1. Print console comparison
-    metrics.print_comparison(final_metrics)
-    
-    # 2. Generate local graph files
-    plot_files = plotting.generate_all_plots(
-        final_times, 
-        final_metrics, 
-        sim_params['NUM_VMS'], 
-        experiment_results
-    )
-    print("\nGenerated local graph files:")
-    for file in plot_files:
-        print(f"- {file}")
-
-    # 3. Print assignment logs
-    metrics.print_assignment_logs(balancers)
-
-    # 4. Log to AWS (if enabled)
-    if args.aws_enabled:
-        print("\n--- Logging results to AWS ---")
-        try:
-            # Log experiment data to DynamoDB
-            print("Logging experiment data to DynamoDB...")
-            aws_utils.log_results_to_dynamodb(
-                args.dynamo_table, 
-                run_id, 
-                experiment_results,
-                sim_params
-            )
-            print("DynamoDB logging complete.")
-
-            # Upload graph files to S3
-            print("Uploading graph files to S3...")
-            aws_utils.upload_graphs_to_s3(
-                args.s3_bucket,
-                run_id,
-                plot_files
-            )
-            print("S3 upload complete.")
-            print(f"\nFind your results in S3 bucket '{args.s3_bucket}' under prefix (folder) '{run_id}/'")
-
-        except Exception as e:
-            print(f"--- AWS Logging Failed ---")
-            print(f"Error: {e}")
-            print("Please check your AWS credentials, IAM permissions, and resource names.")
+    # --- Handle AWS Operations ---
+    handle_aws_operations(args, run_id, sim_params, experiment_results, plot_files)
 
     print("\nSimulation finished.")
 
