@@ -1,6 +1,6 @@
 # Cloud Load Balancing Simulation (RR • RHO • ACO)
 
-Simulate and compare three load-balancing algorithms—Round Robin (RR), Rock Hyrax Optimization (RHO), and Ant Colony Optimization (ACO)—in a heterogeneous cloud environment. Run locally or on a cloud VM (e.g., AWS EC2), and optionally log results to AWS DynamoDB and upload plots to AWS S3.
+Simulate and compare three load-balancing algorithms—Round Robin (RR), Rock Hyrax Optimization (RHO), and Ant Colony Optimization (ACO)—in a heterogeneous cloud environment. Run locally or on a cloud VM (e.g., AWS EC2), and optionally log results to AWS DynamoDB.
 
 ---
 
@@ -16,9 +16,10 @@ Simulate and compare three load-balancing algorithms—Round Robin (RR), Rock Hy
     - Non-interactive (defaults)
 - Outputs
 - AWS Integration
-    - AWS prerequisites (IAM, DynamoDB, S3)
+    - AWS prerequisites (IAM, DynamoDB)
     - Run with AWS flags
     - What gets created
+    - Plot from DynamoDB logs
 - Configuration
 - Troubleshooting
 
@@ -33,7 +34,7 @@ This repository provides a reproducible simulation to evaluate algorithmic strat
 - Three strategies: RR, RHO, ACO
 - Metrics reporting and comparison plots
 - Deterministic defaults with configurable parameters
-- Optional AWS logging to DynamoDB and artifact upload to S3
+- Optional AWS logging to DynamoDB
 
 ## Project Structure
 
@@ -46,7 +47,7 @@ This repository provides a reproducible simulation to evaluate algorithmic strat
 ├── interactive.py              # Interactive user prompts
 ├── metrics.py                  # Metric calculation & printing
 ├── plotting.py                 # .png graph generation
-├── aws_utils.py                # AWS DynamoDB & S3 integration
+├── aws_utils.py                # AWS DynamoDB integration
 ├── requirements.txt            # Python dependencies
 ├── README.md                   # This file
 └── algorithms/                 # Algorithm implementations
@@ -135,14 +136,13 @@ The following plots are generated in the project directory after each run:
 
 ## AWS Integration
 
-You can log every run to DynamoDB (metrics and metadata) and upload plots to S3 for archival/sharing.
+You can log every run to DynamoDB (metrics and metadata). Plots are saved locally on the machine where the simulation runs; you can also regenerate them from DynamoDB.
 
 ### 1) AWS prerequisites
 
-1. Create an IAM user with permissions (for prototyping only; scope down for production):
-     - `AmazonDynamoDBFullAccess`
-     - `AmazonS3FullAccess`
-     - Configure credentials locally: `aws configure`
+1. Create an IAM user/role with permissions (for prototyping only; scope down for production):
+    - `AmazonDynamoDBFullAccess`
+    - Configure credentials locally: `aws configure`
 
 2. Create the DynamoDB table (PowerShell one-liner):
 
@@ -153,8 +153,6 @@ aws dynamodb create-table --table-name LoadBalancingSimResults `
     --billing-mode PAY_PER_REQUEST
 ```
 
-3. Create an S3 bucket (e.g., `my-load-balancing-graphs`) in your preferred region.
-
 Default table name used by the app: `LoadBalancingSimResults`.
 
 ### 2) Run with AWS flags
@@ -162,21 +160,30 @@ Default table name used by the app: `LoadBalancingSimResults`.
 ```powershell
 python main.py --skip-interactive `
     --aws-enabled `
-    --s3-bucket my-load-balancing-graphs `
     --dynamo-table LoadBalancingSimResults
 ```
 
 Flags:
 
-- `--aws-enabled`  Enable AWS logging and uploads
+- `--aws-enabled`  Enable AWS logging to DynamoDB
 - `--dynamo-table` DynamoDB table name (default: `LoadBalancingSimResults`)
-- `--s3-bucket`    S3 bucket to receive `.png` plots
 - `--aws-profile`  Optional AWS CLI profile to use
 
 ### 3) What gets created
 
-- DynamoDB: Previous items are cleared, then metrics from the current run are inserted under a unique `RunID`.
-- S3: All `.png` artifacts are uploaded to a prefix named with that `RunID` (e.g., `s3://my-load-balancing-graphs/sim-run-2025-11-07.../`).
+- DynamoDB: Previous items are cleared, then metrics from the current run are inserted under a unique `RunID`. Final per-VM finish times and assignment logs are also stored to enable full plot regeneration later.
+
+### 4) Plot from DynamoDB logs
+
+You can regenerate the performance graph directly from DynamoDB (useful on a fresh machine or after the local artifacts are gone):
+
+```powershell
+python aws_plot.py --run-id <YOUR_RUN_ID> `
+    --dynamo-table LoadBalancingSimResults `
+    --aws-profile <optional_profile>
+```
+
+This will produce `performance_graphs.png` in the project directory using the metrics stored in DynamoDB. With the latest code, per-VM finish times and assignment logs are also stored in DynamoDB, so the bar charts (`load_distribution.png` and `metrics_comparison.png`) will be regenerated as well.
 
 ## Configuration
 
@@ -186,7 +193,7 @@ Flags:
 ## Troubleshooting
 
 - AWS credentials: run `aws sts get-caller-identity` to verify your setup.
-- Region mismatches: ensure your S3 bucket and DynamoDB table are in the configured AWS region.
+- Region mismatches: ensure your DynamoDB table is in the configured AWS region.
 - Permissions: for production, replace the broad IAM policies with least-privilege, resource-scoped policies.
 
 ---

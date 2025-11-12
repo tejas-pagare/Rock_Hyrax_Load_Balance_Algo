@@ -38,10 +38,10 @@ def run_simulation(sim_params):
     # 3. Print assignment logs
     metrics.print_assignment_logs(balancers)
     
-    return experiment_results, plot_files
+    return experiment_results, plot_files, final_metrics, final_times, balancers
 
 
-def handle_aws_operations(args, run_id, sim_params, experiment_results, plot_files):
+def handle_aws_operations(args, run_id, sim_params, experiment_results, plot_files, final_metrics=None, final_times=None, balancers=None):
     """Handles all AWS-related operations."""
     if not args.aws_enabled:
         return
@@ -59,19 +59,16 @@ def handle_aws_operations(args, run_id, sim_params, experiment_results, plot_fil
             args.dynamo_table,
             run_id,
             experiment_results,
-            sim_params
+            sim_params,
+            final_times=final_times,
+            assignment_logs={
+                name: (balancer.log if hasattr(balancer, 'log') else [])
+                for name, balancer in (balancers or {}).items()
+            } if balancers else None,
         )
         print("DynamoDB logging complete.")
 
-        # Upload graph files to S3
-        print("Uploading graph files to S3...")
-        aws_utils.upload_graphs_to_s3(
-            args.s3_bucket,
-            run_id,
-            plot_files
-        )
-        print("S3 upload complete.")
-        print(f"\nFind your results in S3 bucket '{args.s3_bucket}' under prefix (folder) '{run_id}/'")
+        # Note: S3 uploads removed. Graphs are stored locally; DynamoDB holds metrics and final VM times.
 
     except Exception as e:
         print(f"--- AWS Logging Failed ---")
@@ -105,9 +102,9 @@ def main():
         help="Name of the DynamoDB table to use"
     )
     parser.add_argument(
-        '--s3-bucket', 
-        default=None, 
-        help="Name of the S3 bucket to upload graphs to"
+        '--s3-bucket',
+        default=None,
+        help=argparse.SUPPRESS  # Deprecated; S3 uploads removed
     )
     parser.add_argument(
         '--skip-interactive',
@@ -127,14 +124,9 @@ def main():
     
     # --- AWS Validation ---
     if args.aws_enabled:
-        if not args.s3_bucket:
-            print("Error: --s3-bucket is required when --aws-enabled is set.")
-            print("Please provide an S3 bucket to upload graph artifacts.")
-            exit(1)
         print(f"--- AWS Mode Enabled ---")
         print(f"Profile: {args.aws_profile or 'default'}")
         print(f"DynamoDB Table: {args.dynamo_table}")
-        print(f"S3 Bucket: {args.s3_bucket}")
         print("--------------------------")
         
         # Initialize AWS clients
@@ -202,10 +194,10 @@ def main():
         _np.random.seed(args.random_seed)
         print(f"Random seed set to {args.random_seed}")
 
-    experiment_results, plot_files = run_simulation(sim_params)
+    experiment_results, plot_files, final_metrics, final_times, balancers = run_simulation(sim_params)
 
     # --- Handle AWS Operations ---
-    handle_aws_operations(args, run_id, sim_params, experiment_results, plot_files)
+    handle_aws_operations(args, run_id, sim_params, experiment_results, plot_files, final_metrics, final_times, balancers)
 
     print("\nSimulation finished.")
 

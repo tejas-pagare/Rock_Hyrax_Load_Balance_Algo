@@ -1,21 +1,18 @@
 import boto3
-from boto3.dynamodb.conditions import Key
 from decimal import Decimal
 import json
 
 # Global clients, initialized by main
 dynamodb_client = None
 dynamodb_resource = None
-s3_client = None
 
 def init_clients(profile_name=None):
     """Initialize Boto3 clients with an optional profile."""
-    global dynamodb_client, dynamodb_resource, s3_client
+    global dynamodb_client, dynamodb_resource
     session = boto3.Session(profile_name=profile_name)
     
     dynamodb_client = session.client('dynamodb')
     dynamodb_resource = session.resource('dynamodb')
-    s3_client = session.client('s3')
 
 def clear_dynamodb_table(table_name):
     """
@@ -62,7 +59,7 @@ def clear_dynamodb_table(table_name):
     print(f"Deleted {len(items_to_delete)} items from {table_name}.")
 
 
-def log_results_to_dynamodb(table_name, run_id, experiment_results, sim_params):
+def log_results_to_dynamodb(table_name, run_id, experiment_results, sim_params, final_times=None, assignment_logs=None):
     """
     Logs the experiment results to the specified DynamoDB table.
     
@@ -87,7 +84,7 @@ def log_results_to_dynamodb(table_name, run_id, experiment_results, sim_params):
         }
         batch.put_item(Item=params_item)
 
-        # Log experiment results
+        # Log experiment results (per task_count and algorithm)
         for task_count, algos in experiment_results.items():
             for algo_name, metrics in algos.items():
                 
@@ -106,24 +103,43 @@ def log_results_to_dynamodb(table_name, run_id, experiment_results, sim_params):
                 }
                 
                 batch.put_item(Item=item)
+
+        # Optionally store final per-VM finish times for bar charts (max tasks)
+        if final_times:
+            max_tasks = None
+            try:
+                # Use configured max task step when present
+                max_tasks = sim_params.get('TASK_STEPS', [])[-1]
+            except Exception:
+                max_tasks = None
+
+            for algo_name, times in final_times.items():
+                # Convert numpy arrays to list and floats to Decimals
+                try:
+                    as_list = [float(x) for x in list(times)]
+                except Exception:
+                    continue
+                item = {
+                    'RunID': run_id,
+                    'AlgorithmTaskCount': f"FinalTimes-{algo_name}",
+                    'Algorithm': algo_name,
+                    'TaskCount': max_tasks if max_tasks is not None else 0,
+                    'NumVMs': len(as_list),
+                    'VmFinishTimes': [Decimal(str(v)) for v in as_list],
+                }
+                batch.put_item(Item=item)
+
+        # Optionally store assignment logs (first 50 entries per algorithm)
+        if assignment_logs:
+            for algo_name, logs in assignment_logs.items():
+                if not logs:
+                    continue
+                item = {
+                    'RunID': run_id,
+                    'AlgorithmTaskCount': f"AssignmentLog-{algo_name}",
+                    'Algorithm': algo_name,
+                    'Logs': logs[:50],
+                }
+                batch.put_item(Item=item)
                 
-def upload_graphs_to_s3(bucket_name, run_id, plot_files):
-    """
-    Uploads the generated .png graph files to an S3 bucket
-    under a folder named after the run_id.
-    """
-    if not s3_client:
-        raise Exception("AWS clients not initialized. Call init_clients() first.")
-        
-    for file_name in plot_files:
-        try:
-            s3_key = f"{run_id}/{file_name}" # e.g., sim-run-123/performance_graphs.png
-            s3_client.upload_file(
-                file_name,
-                bucket_name,
-                s3_key,
-                ExtraArgs={'ContentType': 'image/png'}
-            )
-            print(f"Successfully uploaded {file_name} to s3://{bucket_name}/{s3_key}")
-        except Exception as e:
-            print(f"Error uploading {file_name} to S3: {e}")
+# S3 upload functionality removed; DynamoDB logging remains for metrics and final VM times.
