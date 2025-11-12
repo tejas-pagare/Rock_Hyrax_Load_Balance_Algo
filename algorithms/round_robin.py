@@ -34,6 +34,9 @@ class RoundRobinBalancer(LoadBalancer):
         # Increment the counter for the next task
         self.rr_counter += 1
         
+        # Return selected VM id for external simulators (e.g., SimPy)
+        return chosen_vm_id
+        
     def simulate(self, tasks, log_tasks=False):
         """Runs the Round Robin simulation for all tasks."""
         self.reset()

@@ -1,0 +1,63 @@
+# Node/JS dependencies
+node_modules/
+
+# Build output
+build/
+dist/
+
+# Vite cache
+.vite/
+
+# Test coverage and caches
+coverage/
+.vitest/
+*.lcov
+
+# Lint/format caches
+.eslintcache
+.stylelintcache
+
+# Environment files (keep examples)
+.env
+.env.local
+.env.*.local
+.env.development
+.env.test
+.env.production
+.env.development.local
+.env.test.local
+.env.production.local
+!.env.example
+!.env*.example
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.log
+*.log.*
+
+# Editors/IDEs
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS-specific
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Package manager state
+.npm/
+.pnp/
+.pnp.cjs
+.pnp.js
+
+# Cache directories
+.cache/

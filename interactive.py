@@ -54,7 +54,13 @@ def get_simulation_parameters():
             alpha = float(input(f"  6a. ACO Alpha (pheromone) (default: {params['ACO_PARAMS'][0]}): ") or params['ACO_PARAMS'][0])
             beta = float(input(f"  6b. ACO Beta (heuristic) (default: {params['ACO_PARAMS'][1]}): ") or params['ACO_PARAMS'][1])
             evap = float(input(f"  6c. ACO Evap. Rate (0.0-1.0) (default: {params['ACO_PARAMS'][2]}): ") or params['ACO_PARAMS'][2])
-            params["ACO_PARAMS"] = (alpha, beta, evap)
+            # Optional ACS greedy parameter q0
+            try:
+                q0_default = params['ACO_PARAMS'][3]
+            except IndexError:
+                q0_default = 0.1
+            q0 = float(input(f"  6d. ACO q0 (0.0-1.0 greedy prob) (default: {q0_default}): ") or q0_default)
+            params["ACO_PARAMS"] = (alpha, beta, evap, q0)
 
         except ValueError:
             print("Invalid input. Reverting to default parameters.")

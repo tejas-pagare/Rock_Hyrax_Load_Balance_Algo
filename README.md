@@ -96,6 +96,35 @@ Skip all prompts and use defaults:
 python main.py --skip-interactive
 ```
 
+Run with custom parameters from the command line (no prompts):
+
+```powershell
+# Override a few parameters
+python main.py --skip-interactive `
+    --num-vms 16 `
+    --vm-mips-range 200,1200 `
+    --task-length-range 2000,40000 `
+    --task-steps 200,400,800,1200 `
+    --rho-weights 0.6,0.4 `
+    --aco-params 1.0,2.0,0.1,0.1 `
+    --random-seed 42
+```
+
+CLI flags:
+
+- `--num-vms <int>`: number of VMs
+- `--vm-mips-range min,max`: MIPS range for VMs
+- `--task-length-range min,max`: task length (MI) range
+- `--task-steps a,b,c`: list of task counts to simulate
+- `--rho-weights w1,w2`: weights for time and energy (auto-normalized)
+- `--aco-params alpha,beta,evap[,q0]`: ACO parameters; `q0` is greedy selection probability
+- `--random-seed <int>`: set RNG seed for reproducible runs
+
+Notes:
+
+- The simulator uses SimPy for discrete-event processing with one FIFO queue per VM.
+- Response time is measured at assignment time assuming tasks arrive at t=0; you can extend to non-zero arrivals easily within `simulation.py`.
+
 ### Outputs
 
 The following plots are generated in the project directory after each run:

@@ -1,11 +1,49 @@
 import random
 import numpy as np
+import simpy
 
 from entities import create_vm, create_task
 from algorithms.round_robin import RoundRobinBalancer
 from algorithms.rho import RockHyraxBalancer
 from algorithms.aco import AntColonyBalancer
 import metrics
+
+
+def _simulate_with_simpy(balancer, tasks, vms, log_tasks=False):
+    """
+    Run a discrete-event simulation for a single balancer using SimPy.
+    Semantics: all tasks arrive at t=0 in the given order; each VM is a single-server queue (FCFS).
+    Balancer decides the VM per task; we then process tasks on that VM at service_time = length/mips.
+    Returns an array of per-VM finish times (i.e., time of last task completion on that VM).
+    """
+    # Reset balancer internal state for a fresh run
+    balancer.reset()
+
+    env = simpy.Environment()
+
+    # One resource per VM (capacity=1) and a completion tracker
+    vm_resources = [simpy.Resource(env, capacity=1) for _ in vms]
+    vm_last_finish = np.zeros(len(vms), dtype=float)
+
+    def vm_process_task(env, vm_idx, task, resource):
+        # Request the VM (FCFS)
+        with resource.request() as req:
+            yield req
+            # Service time in seconds = MI / MIPS
+            mips = vms[vm_idx]["mips"]
+            service_time = (task['length'] / mips) if mips > 0 else 0
+            yield env.timeout(service_time)
+            vm_last_finish[vm_idx] = env.now
+
+    # Assign tasks and create processes (arrival time = 0)
+    for task in tasks:
+        chosen_vm_id = balancer.assign_task(task, log_tasks)
+        # Start processing immediately; FCFS order preserved by creation order
+        env.process(vm_process_task(env, chosen_vm_id, task, vm_resources[chosen_vm_id]))
+
+    # Run until all tasks finish
+    env.run()
+    return vm_last_finish
 
 def run_experiment(params):
     """
@@ -17,7 +55,7 @@ def run_experiment(params):
     print("--- RUNNING EXPERIMENT ---")
     print(f"Testing with task counts: {params['TASK_STEPS']}")
     print(f"VMs: {params['NUM_VMS']}, RHO Weights (T/E): {params['RHO_WEIGHTS'][0]}/{params['RHO_WEIGHTS'][1]}")
-    print(f"ACO Params (a/b/e): {params['ACO_PARAMS']}")
+    print(f"ACO Params (a/b/e/q0): {params['ACO_PARAMS']}")
     print("=" * 40)
 
     # Create all VMs. They are shared across all balancers.
@@ -56,10 +94,10 @@ def run_experiment(params):
         
         tasks_subset = all_tasks[:task_count]
         
-        # Run simulations
-        rr_finish_times = rr_balancer.simulate(tasks_subset)
-        rho_finish_times = rho_balancer.simulate(tasks_subset)
-        aco_finish_times = aco_balancer.simulate(tasks_subset)
+        # Run simulations (SimPy-based)
+        rr_finish_times = _simulate_with_simpy(rr_balancer, tasks_subset, vms, log_tasks=False)
+        rho_finish_times = _simulate_with_simpy(rho_balancer, tasks_subset, vms, log_tasks=False)
+        aco_finish_times = _simulate_with_simpy(aco_balancer, tasks_subset, vms, log_tasks=False)
         
         # Calculate metrics
         metrics_rr = metrics.calculate_metrics(rr_balancer, rr_finish_times, task_count)
@@ -82,9 +120,9 @@ def run_experiment(params):
     tasks_final = all_tasks[:params['TASK_STEPS'][-1]]
     
     final_times = {
-        "Round Robin": rr_balancer.simulate(tasks_final, log_tasks=True),
-        "RHO": rho_balancer.simulate(tasks_final, log_tasks=True),
-        "ACO": aco_balancer.simulate(tasks_final, log_tasks=True)
+        "Round Robin": _simulate_with_simpy(rr_balancer, tasks_final, vms, log_tasks=True),
+        "RHO": _simulate_with_simpy(rho_balancer, tasks_final, vms, log_tasks=True),
+        "ACO": _simulate_with_simpy(aco_balancer, tasks_final, vms, log_tasks=True)
     }
     
     final_metrics = {

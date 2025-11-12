@@ -19,83 +19,79 @@ class RockHyraxBalancer(LoadBalancer):
         Fitness = w1 * Time_Cost + w2 * Energy_Cost
         """
         fitness_scores = np.zeros(self.num_vms)
-        
-        # 1. Calculate raw costs
+
+        # 1) Time cost: expected finish time if assigning this task now (s)
         raw_time_costs = self._get_expected_finish_times(task)
+
+        # 2) Energy cost: incremental energy to execute THIS task on VM i
+        #    E_task(i) ≈ P_max(i) * service_time(i), service_time = length / mips
         raw_energy_costs = np.zeros(self.num_vms)
-        
         for i in range(self.num_vms):
             vm = self.vms[i]
-            if vm["mips"] > 0:
-                raw_energy_costs[i] = vm["p_max"]
+            mips = vm.get("mips", 0)
+            if mips > 0:
+                service_time = task['length'] / mips
+                raw_energy_costs[i] = vm["p_max"] * service_time
             else:
                 raw_energy_costs[i] = float('inf')
 
-        # 2. Normalize costs (min-max scaling) to be in [0, 1]
+        # 3) Normalize costs (min-max) into [0,1]
         min_time, max_time = np.min(raw_time_costs), np.max(raw_time_costs)
         min_energy, max_energy = np.min(raw_energy_costs), np.max(raw_energy_costs)
 
-        norm_time = (raw_time_costs - min_time) / (max_time - min_time + 1e-6)
-        norm_energy = (raw_energy_costs - min_energy) / (max_energy - min_energy + 1e-6)
-        
-        # 3. Calculate final fitness (lower is better)
-        for i in range(self.num_vms):
-            fitness_scores[i] = (self.w1 * norm_time[i]) + (self.w2 * norm_energy[i])
-            
+        norm_time = (raw_time_costs - min_time) / (max_time - min_time + 1e-9)
+        norm_energy = (raw_energy_costs - min_energy) / (max_energy - min_energy + 1e-9)
+
+        # 4) Weighted fitness (lower is better)
+        fitness_scores = (self.w1 * norm_time) + (self.w2 * norm_energy)
         return fitness_scores
 
     def assign_task(self, task, log_tasks=False):
         """
         Assigns a single task using the RHO logic (Phases 1 and 2).
         """
-        # Calculate fitness: Find fitness scores for all VMs
+        # Calculate fitness for all VMs
         fitness_scores = self._get_fitness_scores(task)
-        
-        # Find the "Alpha" VM (the one with the minimum fitness score)
-        alpha_vm_id = np.argmin(fitness_scores)
-        
-        chosen_vm_id = -1
-        phase = ""
-        log_reason = ""
-        
-        # --- RHO Phases ---
-        r1 = random.random() # 0.0 to 1.0
-        
-        if r1 < 0.5:
-            # --- Phase 1: Exploration (Male Rock Hyrax) ---
-            
-            phase = "Phase 1 (Exploration)"
-            r2 = random.random()
-            if r2 < 0.5:
-                # Eq. 8: Explore a completely random solution
-                chosen_vm_id = random.randint(0, self.num_vms - 1)
-                log_reason = "Random Search"
-            else:
-                # Eq. 9: Move towards the best (Alpha)
-                chosen_vm_id = alpha_vm_id
-                log_reason = "Towards Alpha"
-        else:
-            # --- Phase 2: Exploitation (Female Rock Hyrax) ---
-            phase = "Phase 2 (Exploitation)"
-            # Eq. 10 & 11: Exploit the best (Alpha)
-            chosen_vm_id = alpha_vm_id
-            log_reason = "Best (Alpha)"
-            
-        # --- Logging ---
-        if log_tasks and len(self.log) < 50: # Log first 50 tasks
-            log_msg = f"Task {task['id']}: Alpha VM={alpha_vm_id} (Fit: {fitness_scores[alpha_vm_id]:.2f}). {phase} ({log_reason}). -> Assigned to VM {chosen_vm_id}"
-            self.log.append(log_msg)
-        # --- End Logging ---
-        
-        # --- Task Metrics ---
-        eft = self._get_expected_finish_times(task)[chosen_vm_id]
-        self.task_log.append({
-            "response_time": eft
-        })
-        # --- End Task Metrics ---
 
-        # Assign the task to the chosen VM and update its load
+        # Identify Alpha (best current VM)
+        alpha_vm_id = int(np.argmin(fitness_scores))
+
+        # Exploration vs Exploitation via temperature-controlled softmax
+        r = random.random()
+        if r < 0.5:
+            phase = "Phase 1 (Exploration)"
+            temperature = 1.0  # high temp => more uniform probabilities
+        else:
+            phase = "Phase 2 (Exploitation)"
+            temperature = 0.2  # low temp => focus on best (alpha)
+
+        # Stable softmax over negative fitness (lower fitness => higher prob)
+        scores = -fitness_scores / max(temperature, 1e-9)
+        scores -= np.max(scores)  # numerical stability
+        exps = np.exp(scores)
+        probs = exps / (np.sum(exps) + 1e-12)
+
+        # Draw VM; ensure at least some chance for alpha in exploration, too
+        chosen_vm_id = int(np.random.choice(self.num_vms, p=probs))
+        log_reason = f"Softmax sample (T={temperature:.2f})"
+
+        # Logging (first 50 tasks)
+        if log_tasks and len(self.log) < 50:
+            log_msg = (
+                f"Task {task['id']}: Alpha VM={alpha_vm_id} (Fit: {fitness_scores[alpha_vm_id]:.3f}). "
+                f"{phase} ({log_reason}). -> Assigned to VM {chosen_vm_id} (p={probs[chosen_vm_id]:.3f})"
+            )
+            self.log.append(log_msg)
+
+        # Task metrics based on expected finish time at decision time
+        eft = self._get_expected_finish_times(task)[chosen_vm_id]
+        self.task_log.append({"response_time": eft})
+
+        # Update VM load (sum of MI assigned)
         self.vm_loads[chosen_vm_id] += task['length']
+
+        # Return chosen VM id for SimPy integration
+        return chosen_vm_id
 
     def simulate(self, tasks, log_tasks=False):
         """Runs the RHO simulation for all tasks."""
