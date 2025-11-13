@@ -131,7 +131,8 @@ def publish_metrics_and_dashboard(
             # tasks per second
             add_metric(algo, 'Throughput', mets['Throughput_task_s'], 'Count/Second')
         if 'TotalEnergy_kJ' in mets:
-            add_metric(algo, 'TotalEnergy', mets['TotalEnergy_kJ'], 'Kilojoules')
+            # CloudWatch doesn't support a Kilojoules unit; publish as unitless
+            add_metric(algo, 'TotalEnergy', mets['TotalEnergy_kJ'], None)
         if algo in perf_scores:
             add_metric(algo, 'PerformanceScore', perf_scores[algo], 'Percent')
 
