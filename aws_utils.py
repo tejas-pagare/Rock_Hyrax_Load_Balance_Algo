@@ -14,6 +14,37 @@ def init_clients(profile_name=None):
     dynamodb_client = session.client('dynamodb')
     dynamodb_resource = session.resource('dynamodb')
 
+def ensure_dynamodb_table(table_name):
+    """Ensure the DynamoDB table exists with the expected schema; create if missing."""
+    if not dynamodb_client or not dynamodb_resource:
+        raise Exception("AWS clients not initialized. Call init_clients() first.")
+
+    try:
+        dynamodb_client.describe_table(TableName=table_name)
+        return
+    except dynamodb_client.exceptions.ResourceNotFoundException:
+        pass
+    except Exception:
+        # Fall through to create just in case of unexpected errors
+        pass
+
+    # Create table with (RunID HASH, AlgorithmTaskCount RANGE)
+    table = dynamodb_resource.create_table(
+        TableName=table_name,
+        KeySchema=[
+            {"AttributeName": "RunID", "KeyType": "HASH"},
+            {"AttributeName": "AlgorithmTaskCount", "KeyType": "RANGE"},
+        ],
+        AttributeDefinitions=[
+            {"AttributeName": "RunID", "AttributeType": "S"},
+            {"AttributeName": "AlgorithmTaskCount", "AttributeType": "S"},
+        ],
+        BillingMode='PAY_PER_REQUEST',
+    )
+    # Wait for table creation
+    table.meta.client.get_waiter('table_exists').wait(TableName=table_name)
+    return
+
 def clear_dynamodb_table(table_name):
     """
     Scans and deletes all items from a DynamoDB table.

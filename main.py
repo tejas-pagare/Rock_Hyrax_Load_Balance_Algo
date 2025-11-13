@@ -9,6 +9,7 @@ import simulation
 import aws_utils
 import metrics
 import plotting
+import aws_cloudwatch
 
 def run_simulation(sim_params):
     """Runs the simulation and returns the results."""
@@ -48,6 +49,10 @@ def handle_aws_operations(args, run_id, sim_params, experiment_results, plot_fil
 
     print("\n--- Logging results to AWS ---")
     try:
+        # Ensure the DynamoDB table exists
+        print(f"Ensuring DynamoDB table exists: {args.dynamo_table}...")
+        aws_utils.ensure_dynamodb_table(args.dynamo_table)
+
         # Clear previous results from DynamoDB
         print(f"Clearing previous results from DynamoDB table: {args.dynamo_table}...")
         aws_utils.clear_dynamodb_table(args.dynamo_table)
@@ -69,6 +74,19 @@ def handle_aws_operations(args, run_id, sim_params, experiment_results, plot_fil
         print("DynamoDB logging complete.")
 
         # Note: S3 uploads removed. Graphs are stored locally; DynamoDB holds metrics and final VM times.
+
+        # Publish CloudWatch metrics and create a comparison dashboard
+        if final_metrics:
+            print("Publishing CloudWatch metrics and dashboard...")
+            info = aws_cloudwatch.publish_metrics_and_dashboard(
+                run_id=run_id,
+                final_metrics=final_metrics,
+                profile_name=args.aws_profile,
+            )
+            print(
+                f"CloudWatch namespace: {info['namespace']}, region: {info['region']}\n"
+                f"Dashboard: {info['dashboard']}"
+            )
 
     except Exception as e:
         print(f"--- AWS Logging Failed ---")
@@ -106,11 +124,7 @@ def main():
         default=None,
         help=argparse.SUPPRESS  # Deprecated; S3 uploads removed
     )
-    parser.add_argument(
-        '--skip-interactive',
-        action='store_true',
-        help="Skip interactive prompts and use default parameters"
-    )
+    # Note: interactive prompts are now the default; CLI overrides still supported.
     # Simulation parameter overrides via CLI
     parser.add_argument('--num-vms', type=int, default=None, help='Number of VMs')
     parser.add_argument('--vm-mips-range', type=str, default=None, help='VM MIPS range as min,max')
@@ -143,19 +157,18 @@ def main():
     def parse_floats(s):
         return [float(x.strip()) for x in s.split(',') if x.strip()]
 
-    # Gather defaults first
-    sim_params = config.get_default_params()
+    # Always prompt for parameters, then apply any CLI overrides on top
+    sim_params = interactive.get_simulation_parameters()
 
-    # Apply CLI overrides if provided
-    overrides_used = False
+    # Apply CLI overrides if provided (takes precedence over interactive answers)
     if args.num_vms is not None:
-        sim_params['NUM_VMS'] = args.num_vms; overrides_used = True
+        sim_params['NUM_VMS'] = args.num_vms
     if args.vm_mips_range:
-        sim_params['VM_MIPS_RANGE'] = parse_pair(args.vm_mips_range); overrides_used = True
+        sim_params['VM_MIPS_RANGE'] = parse_pair(args.vm_mips_range)
     if args.task_length_range:
-        sim_params['TASK_LENGTH_RANGE'] = parse_pair(args.task_length_range); overrides_used = True
+        sim_params['TASK_LENGTH_RANGE'] = parse_pair(args.task_length_range)
     if args.task_steps:
-        sim_params['TASK_STEPS'] = parse_list_ints(args.task_steps); overrides_used = True
+        sim_params['TASK_STEPS'] = parse_list_ints(args.task_steps)
     if args.rho_weights:
         w = parse_floats(args.rho_weights)
         if len(w) != 2:
@@ -164,7 +177,6 @@ def main():
         if total <= 0:
             raise ValueError('RHO weights must be positive')
         sim_params['RHO_WEIGHTS'] = (w[0]/total, w[1]/total)
-        overrides_used = True
     if args.aco_params:
         ap = parse_floats(args.aco_params)
         if len(ap) not in (3,4):
@@ -172,15 +184,6 @@ def main():
         if len(ap) == 3:
             ap.append(0.0)
         sim_params['ACO_PARAMS'] = tuple(ap[:4])
-        overrides_used = True
-
-    if not overrides_used and not args.skip_interactive:
-        sim_params = interactive.get_simulation_parameters()
-    else:
-        if overrides_used:
-            print('Using CLI overrides for simulation parameters.')
-        else:
-            print('Skipping interactive setup, using default parameters.')
     
     # Generate a unique ID for this simulation run
     run_id = f"sim-run-{datetime.now().strftime('%Y-%m-%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"

@@ -20,6 +20,7 @@ Simulate and compare three load-balancing algorithms—Round Robin (RR), Rock Hy
     - Run with AWS flags
     - What gets created
     - Plot from DynamoDB logs
+    - CloudWatch metrics & dashboard
 - Configuration
 - Troubleshooting
 
@@ -144,23 +145,15 @@ You can log every run to DynamoDB (metrics and metadata). Plots are saved locall
     - `AmazonDynamoDBFullAccess`
     - Configure credentials locally: `aws configure`
 
-2. Create the DynamoDB table (PowerShell one-liner):
+2. DynamoDB table creation is automatic
 
-```powershell
-aws dynamodb create-table --table-name LoadBalancingSimResults `
-    --attribute-definitions AttributeName=RunID,AttributeType=S AttributeName=AlgorithmTaskCount,AttributeType=S `
-    --key-schema AttributeName=RunID,KeyType=HASH AttributeName=AlgorithmTaskCount,KeyType=RANGE `
-    --billing-mode PAY_PER_REQUEST
-```
-
-Default table name used by the app: `LoadBalancingSimResults`.
+If the table does not exist, the app will create it for you with the required keys:
+`RunID` (partition key, String) and `AlgorithmTaskCount` (sort key, String). Default table name: `LoadBalancingSimResults`.
 
 ### 2) Run with AWS flags
 
 ```powershell
-python main.py --skip-interactive `
-    --aws-enabled `
-    --dynamo-table LoadBalancingSimResults
+python main.py --aws-enabled --dynamo-table LoadBalancingSimResults
 ```
 
 Flags:
@@ -185,8 +178,19 @@ python aws_plot.py --run-id <YOUR_RUN_ID> `
 
 This will produce `performance_graphs.png` in the project directory using the metrics stored in DynamoDB. With the latest code, per-VM finish times and assignment logs are also stored in DynamoDB, so the bar charts (`load_distribution.png` and `metrics_comparison.png`) will be regenerated as well.
 
+### CloudWatch metrics & dashboard
+
+When `--aws-enabled` is used, the run also publishes custom CloudWatch metrics and creates a run-specific dashboard comparing algorithms:
+
+- Namespace: `LoadBalancerMetrics`
+- Dimensions: `Algorithm`, `RunID`
+- Metrics: `AverageResponseTime` (s), `Makespan` (s), `Throughput` (tasks/sec), `TotalEnergy` (kJ), and an aggregate `PerformanceScore` (0–100)
+
+The dashboard is named `Load_Balancer_Comparison_<RunID>` and contains bar charts to compare algorithms side-by-side. You can find it in the CloudWatch console under Dashboards (ensure you’re in the same AWS region as your credentials).
+
 ## Configuration
 
+- Interactive prompts are the default; you can still override any specific setting via CLI flags.
 - Edit defaults in `config.py` or use the interactive prompts in `main.py`.
 - Algorithms are implemented under `algorithms/` (extend by adding new classes inheriting from `base.py`).
 
