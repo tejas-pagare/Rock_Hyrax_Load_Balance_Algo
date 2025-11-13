@@ -2,8 +2,10 @@ import boto3
 from typing import Dict, Any, Optional
 
 
-def _get_session(profile_name: Optional[str] = None) -> boto3.session.Session:
-    return boto3.Session(profile_name=profile_name) if profile_name else boto3.Session()
+def _get_session(profile_name: Optional[str] = None, region_name: Optional[str] = None) -> boto3.session.Session:
+    if profile_name or region_name:
+        return boto3.Session(profile_name=profile_name, region_name=region_name)
+    return boto3.Session()
 
 
 def _normalize(values: Dict[str, float], higher_is_better: bool) -> Dict[str, float]:
@@ -87,6 +89,7 @@ def publish_metrics_and_dashboard(
     run_id: str,
     final_metrics: Dict[str, Dict[str, Any]],
     profile_name: Optional[str] = None,
+    region_name: Optional[str] = None,
     namespace: str = 'LoadBalancerMetrics',
 ):
     """
@@ -98,7 +101,7 @@ def publish_metrics_and_dashboard(
         'ACO': {...}
       }
     """
-    session = _get_session(profile_name)
+    session = _get_session(profile_name, region_name)
     cw = session.client('cloudwatch')
 
     # Compute PerformanceScore per algorithm
