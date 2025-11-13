@@ -1,4 +1,5 @@
 import boto3
+import os
 from decimal import Decimal
 import json
 
@@ -6,11 +7,32 @@ import json
 dynamodb_client = None
 dynamodb_resource = None
 
-def init_clients(profile_name=None):
-    """Initialize Boto3 clients with an optional profile."""
+def init_clients(profile_name=None, region_name=None):
+    """Initialize Boto3 clients with an optional profile and region.
+
+    Region resolution order:
+    1) Explicit region_name argument
+    2) Environment variables AWS_REGION / AWS_DEFAULT_REGION
+    3) Region configured in the provided profile (if any)
+    If none found, raise a clear error rather than relying on implicit defaults.
+    """
     global dynamodb_client, dynamodb_resource
-    session = boto3.Session(profile_name=profile_name)
-    
+
+    # Resolve region
+    region = region_name or os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
+
+    # If a profile is provided and region still unknown, try reading from that profile
+    if profile_name and not region:
+        _probe = boto3.Session(profile_name=profile_name)
+        region = _probe.region_name
+
+    if not region:
+        raise ValueError(
+            "No AWS region configured. Provide --aws-region or set AWS_REGION/AWS_DEFAULT_REGION, "
+            "or configure a default region in your AWS profile."
+        )
+
+    session = boto3.Session(profile_name=profile_name, region_name=region)
     dynamodb_client = session.client('dynamodb')
     dynamodb_resource = session.resource('dynamodb')
 

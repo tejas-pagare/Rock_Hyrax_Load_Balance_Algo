@@ -82,6 +82,7 @@ def handle_aws_operations(args, run_id, sim_params, experiment_results, plot_fil
                 run_id=run_id,
                 final_metrics=final_metrics,
                 profile_name=args.aws_profile,
+                region_name=args.aws_region,
             )
             print(
                 f"CloudWatch namespace: {info['namespace']}, region: {info['region']}\n"
@@ -115,6 +116,11 @@ def main():
         help="AWS profile name to use (if not default)"
     )
     parser.add_argument(
+        '--aws-region',
+        default=None,
+        help="AWS region to use (e.g., us-east-1). If omitted, falls back to AWS_REGION/AWS_DEFAULT_REGION or profile config."
+    )
+    parser.add_argument(
         '--dynamo-table', 
         default='LoadBalancingSimResults', 
         help="Name of the DynamoDB table to use"
@@ -140,11 +146,13 @@ def main():
     if args.aws_enabled:
         print(f"--- AWS Mode Enabled ---")
         print(f"Profile: {args.aws_profile or 'default'}")
+        if args.aws_region:
+            print(f"Region: {args.aws_region}")
         print(f"DynamoDB Table: {args.dynamo_table}")
         print("--------------------------")
         
         # Initialize AWS clients
-        aws_utils.init_clients(args.aws_profile)
+        aws_utils.init_clients(args.aws_profile, args.aws_region)
 
     # --- Get Simulation Parameters ---
     def parse_pair(s):

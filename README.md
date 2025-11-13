@@ -153,7 +153,7 @@ If the table does not exist, the app will create it for you with the required ke
 ### 2) Run with AWS flags
 
 ```powershell
-python main.py --aws-enabled --dynamo-table LoadBalancingSimResults
+python main.py --aws-enabled --dynamo-table LoadBalancingSimResults --aws-region <your-region>
 ```
 
 Flags:
@@ -161,6 +161,7 @@ Flags:
 - `--aws-enabled`  Enable AWS logging to DynamoDB
 - `--dynamo-table` DynamoDB table name (default: `LoadBalancingSimResults`)
 - `--aws-profile`  Optional AWS CLI profile to use
+- `--aws-region`   AWS region (e.g., `us-east-1`). If omitted, the app tries `AWS_REGION`/`AWS_DEFAULT_REGION` or the profile’s configured region.
 
 ### 3) What gets created
 
